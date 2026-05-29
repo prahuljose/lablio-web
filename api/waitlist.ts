@@ -38,12 +38,14 @@ export default async function handler(request: any, response: any) {
 
   const { error } = await supabase
     .from("waitlist_emails")
-    .upsert(
-      { email, source: "coming_soon_page" },
-      { onConflict: "email", ignoreDuplicates: true },
-    );
+    .insert({ email, source: "coming_soon_page" });
 
   if (error) {
+    if (error.code === "23505") {
+      return response.status(200).json({ ok: true });
+    }
+
+    console.error("Waitlist signup failed", error);
     return response.status(500).json({ error: "Could not join waitlist" });
   }
 
