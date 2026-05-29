@@ -12,7 +12,6 @@ import {
   Sparkles,
   TestTube2,
 } from "lucide-react";
-import { isSupabaseConfigured, supabase } from "./supabase";
 import "./styles.css";
 
 const biomarkers = [
@@ -73,23 +72,16 @@ function App() {
       return;
     }
 
-    if (!isSupabaseConfigured || !supabase) {
-      setStatus("error");
-      setMessage("Waitlist is almost ready. Supabase env vars still need to be added.");
-      return;
-    }
-
     setStatus("loading");
     setMessage("");
 
-    const { error } = await supabase
-      .from("waitlist_emails")
-      .upsert(
-        { email: trimmedEmail, source: "coming_soon_page" },
-        { onConflict: "email", ignoreDuplicates: true },
-      );
+    const response = await fetch("/api/waitlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: trimmedEmail }),
+    });
 
-    if (error) {
+    if (!response.ok) {
       setStatus("error");
       setMessage("Something did not land. Please try again in a moment.");
       return;
