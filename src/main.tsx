@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
@@ -12,6 +12,7 @@ import {
   Sparkles,
   TestTube2,
 } from "lucide-react";
+import { isSupabaseConfigured, supabase } from "./supabase";
 import "./styles.css";
 
 const biomarkers = [
@@ -58,6 +59,47 @@ function PointerField() {
 }
 
 function App() {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  const handleWaitlistSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedEmail) {
+      setStatus("error");
+      setMessage("Enter an email address to join the list.");
+      return;
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      setStatus("error");
+      setMessage("Waitlist is almost ready. Supabase env vars still need to be added.");
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("");
+
+    const { error } = await supabase
+      .from("waitlist_emails")
+      .upsert(
+        { email: trimmedEmail, source: "coming_soon_page" },
+        { onConflict: "email", ignoreDuplicates: true },
+      );
+
+    if (error) {
+      setStatus("error");
+      setMessage("Something did not land. Please try again in a moment.");
+      return;
+    }
+
+    setStatus("success");
+    setMessage("You're on the early access list.");
+    setEmail("");
+  };
+
   return (
     <main className="page-shell">
       <PointerField />
@@ -90,7 +132,7 @@ function App() {
               use.
             </p>
 
-            <form className="waitlist" aria-label="Join the Lablio waitlist">
+            <form className="waitlist" aria-label="Join the Lablio waitlist" onSubmit={handleWaitlistSubmit}>
               <label htmlFor="email">Get early access</label>
               <div className="input-row">
                 <input
@@ -98,12 +140,21 @@ function App() {
                   type="email"
                   placeholder="you@example.com"
                   autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={status === "loading"}
+                  required
                 />
-                <button type="button">
-                  Join
+                <button type="submit" disabled={status === "loading"}>
+                  {status === "loading" ? "Joining" : "Join"}
                   <ArrowRight size={18} />
                 </button>
               </div>
+              {message && (
+                <p className={`form-message ${status === "success" ? "success" : "error"}`} role="status">
+                  {message}
+                </p>
+              )}
             </form>
 
             <div className="proof-row" aria-label="Product highlights">

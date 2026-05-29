@@ -250,6 +250,27 @@ h1::first-line {
   background: #0a766a;
 }
 
+.input-row button:disabled,
+.input-row input:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.form-message {
+  min-height: 22px;
+  margin: 10px 4px 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.form-message.success {
+  color: #0a766a;
+}
+
+.form-message.error {
+  color: #9b3f24;
+}
+
 .proof-row {
   display: flex;
   flex-wrap: wrap;
