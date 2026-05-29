@@ -6,9 +6,11 @@ import {
   BarChart3,
   Brain,
   CheckCircle2,
+  Download,
   FileScan,
   LineChart,
   LockKeyhole,
+  RefreshCw,
   Sparkles,
   TestTube2,
 } from "lucide-react";
@@ -26,6 +28,27 @@ const insights = [
   "Track every biomarker as a living timeline, not a forgotten PDF.",
   "See patterns, ranges, and next questions before your next appointment.",
 ];
+
+type WaitlistResponse = {
+  ok?: boolean;
+  duplicate?: boolean;
+  error?: string;
+};
+
+type WaitlistRow = {
+  email: string;
+  status: string;
+  source: string;
+  ref: string | null;
+  referrer: string | null;
+  created_at: string;
+};
+
+type AdminResponse = {
+  total: number;
+  byStatus: Record<string, number>;
+  rows: WaitlistRow[];
+};
 
 function PointerField() {
   const fieldRef = useRef<HTMLDivElement>(null);
@@ -57,10 +80,12 @@ function PointerField() {
   );
 }
 
-function App() {
+function LandingPage() {
   const [email, setEmail] = useState("");
+  const [website, setWebsite] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const renderedAt = useRef(Date.now());
 
   const handleWaitlistSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -78,17 +103,26 @@ function App() {
     const response = await fetch("/api/waitlist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: trimmedEmail }),
+      body: JSON.stringify({
+        email: trimmedEmail,
+        website,
+        renderedAt: renderedAt.current,
+        ref: new URLSearchParams(window.location.search).get("ref") ||
+          new URLSearchParams(window.location.search).get("utm_source"),
+        referrer: document.referrer,
+      }),
     });
+
+    const result = (await response.json().catch(() => ({}))) as WaitlistResponse;
 
     if (!response.ok) {
       setStatus("error");
-      setMessage("Something did not land. Please try again in a moment.");
+      setMessage(result.error || "Something did not land. Please try again in a moment.");
       return;
     }
 
     setStatus("success");
-    setMessage("You're on the early access list.");
+    setMessage(result.duplicate ? "You're already on the early access list." : "You're on the early access list.");
     setEmail("");
   };
 
@@ -126,6 +160,17 @@ function App() {
 
             <form className="waitlist" aria-label="Join the Lablio waitlist" onSubmit={handleWaitlistSubmit}>
               <label htmlFor="email">Get early access</label>
+              <div className="bot-field" aria-hidden="true">
+                <label htmlFor="website">Website</label>
+                <input
+                  id="website"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={website}
+                  onChange={(event) => setWebsite(event.target.value)}
+                />
+              </div>
               <div className="input-row">
                 <input
                   id="email"
@@ -239,6 +284,141 @@ function App() {
       </section>
     </main>
   );
+}
+
+function AdminWaitlist() {
+  const [token, setToken] = useState(() => window.localStorage.getItem("lablio_admin_token") || "");
+  const [data, setData] = useState<AdminResponse | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  const loadWaitlist = async () => {
+    if (!token) {
+      setStatus("error");
+      setMessage("Enter the admin token.");
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("");
+    window.localStorage.setItem("lablio_admin_token", token);
+
+    const response = await fetch("/api/admin/waitlist", {
+      headers: { "x-admin-token": token },
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setStatus("error");
+      setMessage(result?.error || "Could not load waitlist.");
+      return;
+    }
+
+    setData(result);
+    setStatus("idle");
+  };
+
+  useEffect(() => {
+    if (token) {
+      void loadWaitlist();
+    }
+  }, []);
+
+  const csvUrl = `/api/admin/waitlist?format=csv&token=${encodeURIComponent(token)}`;
+
+  return (
+    <main className="admin-shell">
+      <section className="admin-panel">
+        <div className="admin-header">
+          <a className="brand" href="/" aria-label="Lablio home">
+            <span className="brand-mark">
+              <Activity size={22} strokeWidth={2.4} />
+            </span>
+            <span>Lablio</span>
+          </a>
+          <div className="admin-actions">
+            <button type="button" onClick={loadWaitlist} disabled={status === "loading"} title="Refresh">
+              <RefreshCw size={17} />
+              Refresh
+            </button>
+            <a href={csvUrl} aria-disabled={!token}>
+              <Download size={17} />
+              CSV
+            </a>
+          </div>
+        </div>
+
+        <div className="admin-login">
+          <label htmlFor="admin-token">Admin token</label>
+          <div className="input-row">
+            <input
+              id="admin-token"
+              type="password"
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+              placeholder="Paste ADMIN_TOKEN"
+            />
+            <button type="button" onClick={loadWaitlist} disabled={status === "loading"}>
+              {status === "loading" ? "Loading" : "Open"}
+            </button>
+          </div>
+          {message && <p className="form-message error">{message}</p>}
+        </div>
+
+        <div className="admin-stats">
+          <article>
+            <span>Total</span>
+            <strong>{data?.total ?? "--"}</strong>
+          </article>
+          <article>
+            <span>Joined</span>
+            <strong>{data?.byStatus.joined ?? 0}</strong>
+          </article>
+          <article>
+            <span>Invited</span>
+            <strong>{data?.byStatus.invited ?? 0}</strong>
+          </article>
+        </div>
+
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Ref</th>
+                <th>Joined</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.rows || []).map((row) => (
+                <tr key={`${row.email}-${row.created_at}`}>
+                  <td>{row.email}</td>
+                  <td>{row.status}</td>
+                  <td>{row.ref || row.source}</td>
+                  <td>{new Date(row.created_at).toLocaleString()}</td>
+                </tr>
+              ))}
+              {data && data.rows.length === 0 && (
+                <tr>
+                  <td colSpan={4}>No signups yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function App() {
+  if (window.location.pathname === "/admin/waitlist") {
+    return <AdminWaitlist />;
+  }
+
+  return <LandingPage />;
 }
 
 createRoot(document.getElementById("root")!).render(
