@@ -34,6 +34,39 @@ function cleanText(value: string | undefined, maxLength: number) {
   return value?.trim().slice(0, maxLength) || null;
 }
 
+async function sendConfirmationEmail(email: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.WAITLIST_EMAIL_FROM || "Lablio <onboarding@resend.dev>";
+
+  if (!apiKey) return;
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: email,
+      subject: "You're on the Lablio early access list",
+      html: `
+        <div style="font-family: Inter, Arial, sans-serif; color: #14211f; line-height: 1.6;">
+          <h1 style="font-size: 28px; margin-bottom: 12px;">You're on the list.</h1>
+          <p>Thanks for joining Lablio early access. We're building a calmer way to turn blood reports into biomarker timelines, charts, and useful insights.</p>
+          <p>We'll email you when private beta opens.</p>
+          <p style="margin-top: 28px;">Rahul & Lablio</p>
+        </div>
+      `,
+      text: "You're on the Lablio early access list. We'll email you when private beta opens.",
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("Waitlist confirmation email failed", await response.text());
+  }
+}
+
 export default async function handler(request: any, response: any) {
   if (request.method !== "POST") {
     return response.status(405).json({ error: "Method not allowed" });
@@ -93,6 +126,8 @@ export default async function handler(request: any, response: any) {
     console.error("Waitlist signup failed", error);
     return response.status(500).json({ error: "Could not join waitlist" });
   }
+
+  await sendConfirmationEmail(email);
 
   return response.status(200).json({ ok: true });
 }

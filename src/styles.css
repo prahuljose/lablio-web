@@ -170,7 +170,8 @@ button {
 }
 
 h1,
-h2 {
+h2,
+h3 {
   margin: 0;
   color: #14211f;
 }
@@ -501,6 +502,47 @@ h1::first-line {
   line-height: 1.45;
 }
 
+.workflow {
+  display: grid;
+  width: min(1180px, calc(100% - 40px));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 auto 32px;
+}
+
+.workflow-step {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(23, 33, 31, 0.11);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(16px);
+}
+
+.workflow-step svg {
+  margin: 12px 0 14px;
+  color: #0a8d7e;
+}
+
+.step-number {
+  display: block;
+  color: #8b9a95;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.workflow-step h3 {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.workflow-step p {
+  margin: 8px 0 0;
+  color: #526560;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
 .coming-soon {
   display: grid;
   width: min(1180px, calc(100% - 40px));
@@ -676,13 +718,25 @@ h2 {
   font-weight: 650;
 }
 
+.admin-table select {
+  min-height: 36px;
+  border: 1px solid rgba(23, 33, 31, 0.12);
+  border-radius: 12px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #14211f;
+  font: inherit;
+  font-weight: 800;
+}
+
 @media (max-width: 920px) {
   .hero {
     min-height: auto;
   }
 
   .hero-grid,
-  .coming-soon {
+  .coming-soon,
+  .workflow {
     grid-template-columns: 1fr;
   }
 
@@ -701,7 +755,8 @@ h2 {
 
 @media (max-width: 640px) {
   .hero,
-  .coming-soon {
+  .coming-soon,
+  .workflow {
     width: min(100% - 28px, 1180px);
   }
 

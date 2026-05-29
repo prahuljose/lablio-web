@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 type WaitlistRow = {
+  id: string;
   email: string;
   status: string;
   source: string;
@@ -24,8 +25,10 @@ function csvEscape(value: unknown) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+const allowedStatuses = new Set(["joined", "invited", "converted", "bounced"]);
+
 export default async function handler(request: any, response: any) {
-  if (request.method !== "GET") {
+  if (!["GET", "PATCH"].includes(request.method)) {
     return response.status(405).json({ error: "Method not allowed" });
   }
 
@@ -44,9 +47,35 @@ export default async function handler(request: any, response: any) {
     auth: { persistSession: false },
   });
 
+  if (request.method === "PATCH") {
+    let payload: { id?: string; status?: string };
+
+    try {
+      payload = typeof request.body === "string" ? JSON.parse(request.body) : request.body;
+    } catch {
+      return response.status(400).json({ error: "Invalid request body" });
+    }
+
+    if (!payload.id || !payload.status || !allowedStatuses.has(payload.status)) {
+      return response.status(400).json({ error: "Invalid status update" });
+    }
+
+    const { error } = await supabase
+      .from("waitlist_emails")
+      .update({ status: payload.status })
+      .eq("id", payload.id);
+
+    if (error) {
+      console.error("Waitlist status update failed", error);
+      return response.status(500).json({ error: "Could not update status" });
+    }
+
+    return response.status(200).json({ ok: true });
+  }
+
   const { data, error } = await supabase
     .from("waitlist_emails")
-    .select("email,status,source,ref,referrer,user_agent,created_at")
+    .select("id,email,status,source,ref,referrer,user_agent,created_at")
     .order("created_at", { ascending: false })
     .limit(500);
 
@@ -59,7 +88,7 @@ export default async function handler(request: any, response: any) {
   const url = new URL(request.url || "/", "https://lablio.local");
 
   if (url.searchParams.get("format") === "csv") {
-    const header = ["email", "status", "source", "ref", "referrer", "user_agent", "created_at"];
+    const header = ["id", "email", "status", "source", "ref", "referrer", "user_agent", "created_at"];
     const csv = [
       header.join(","),
       ...rows.map((row) => header.map((key) => csvEscape(row[key as keyof WaitlistRow])).join(",")),

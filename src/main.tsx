@@ -11,8 +11,10 @@ import {
   LineChart,
   LockKeyhole,
   RefreshCw,
+  ScanLine,
   Sparkles,
   TestTube2,
+  Upload,
 } from "lucide-react";
 import "./styles.css";
 
@@ -29,6 +31,29 @@ const insights = [
   "See patterns, ranges, and next questions before your next appointment.",
 ];
 
+const workflowSteps = [
+  {
+    icon: Upload,
+    title: "Upload report",
+    body: "Drop in a PDF or image from your latest bloodwork.",
+  },
+  {
+    icon: ScanLine,
+    title: "Extract markers",
+    body: "Lablio reads values, units, dates, and reference ranges.",
+  },
+  {
+    icon: LineChart,
+    title: "Track trends",
+    body: "Every biomarker becomes a timeline you can revisit.",
+  },
+  {
+    icon: Brain,
+    title: "Get insights",
+    body: "Spot changes, patterns, and better questions to ask next.",
+  },
+];
+
 type WaitlistResponse = {
   ok?: boolean;
   duplicate?: boolean;
@@ -36,6 +61,7 @@ type WaitlistResponse = {
 };
 
 type WaitlistRow = {
+  id: string;
   email: string;
   status: string;
   source: string;
@@ -85,7 +111,19 @@ function LandingPage() {
   const [website, setWebsite] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [waitlistCount, setWaitlistCount] = useState<number | null>(null);
   const renderedAt = useRef(Date.now());
+
+  useEffect(() => {
+    void fetch("/api/waitlist-count")
+      .then((response) => response.json())
+      .then((result) => {
+        if (typeof result.count === "number") {
+          setWaitlistCount(result.count);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   const handleWaitlistSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -123,6 +161,9 @@ function LandingPage() {
 
     setStatus("success");
     setMessage(result.duplicate ? "You're already on the early access list." : "You're on the early access list.");
+    if (!result.duplicate) {
+      setWaitlistCount((count) => (typeof count === "number" ? count + 1 : count));
+    }
     setEmail("");
   };
 
@@ -195,6 +236,12 @@ function LandingPage() {
             </form>
 
             <div className="proof-row" aria-label="Product highlights">
+              {typeof waitlistCount === "number" && waitlistCount > 0 && (
+                <span>
+                  <Sparkles size={18} />
+                  {waitlistCount.toLocaleString()} joined
+                </span>
+              )}
               <span>
                 <FileScan size={18} />
                 Report parsing
@@ -268,6 +315,20 @@ function LandingPage() {
         </div>
       </section>
 
+      <section className="workflow" aria-label="How Lablio works">
+        {workflowSteps.map((step, index) => {
+          const Icon = step.icon;
+          return (
+            <article className="workflow-step" key={step.title}>
+              <span className="step-number">{String(index + 1).padStart(2, "0")}</span>
+              <Icon size={22} />
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+            </article>
+          );
+        })}
+      </section>
+
       <section className="coming-soon" aria-label="What Lablio will do">
         <div>
           <span className="section-kicker">Coming soon</span>
@@ -290,6 +351,7 @@ function AdminWaitlist() {
   const [token, setToken] = useState(() => window.localStorage.getItem("lablio_admin_token") || "");
   const [data, setData] = useState<AdminResponse | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
   const loadWaitlist = async () => {
@@ -317,6 +379,42 @@ function AdminWaitlist() {
 
     setData(result);
     setStatus("idle");
+  };
+
+  const updateStatus = async (id: string, nextStatus: string) => {
+    setUpdatingId(id);
+    setMessage("");
+
+    const response = await fetch("/api/admin/waitlist", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": token,
+      },
+      body: JSON.stringify({ id, status: nextStatus }),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      setStatus("error");
+      setMessage(result?.error || "Could not update status.");
+      setUpdatingId(null);
+      return;
+    }
+
+    setData((current) => {
+      if (!current) return current;
+      const previous = current.rows.find((row) => row.id === id)?.status;
+      const rows = current.rows.map((row) => (row.id === id ? { ...row, status: nextStatus } : row));
+      const byStatus = { ...current.byStatus };
+
+      if (previous) byStatus[previous] = Math.max((byStatus[previous] || 1) - 1, 0);
+      byStatus[nextStatus] = (byStatus[nextStatus] || 0) + 1;
+
+      return { ...current, rows, byStatus };
+    });
+    setUpdatingId(null);
   };
 
   useEffect(() => {
@@ -395,7 +493,19 @@ function AdminWaitlist() {
               {(data?.rows || []).map((row) => (
                 <tr key={`${row.email}-${row.created_at}`}>
                   <td>{row.email}</td>
-                  <td>{row.status}</td>
+                  <td>
+                    <select
+                      value={row.status}
+                      disabled={updatingId === row.id}
+                      onChange={(event) => void updateStatus(row.id, event.target.value)}
+                      aria-label={`Update status for ${row.email}`}
+                    >
+                      <option value="joined">joined</option>
+                      <option value="invited">invited</option>
+                      <option value="converted">converted</option>
+                      <option value="bounced">bounced</option>
+                    </select>
+                  </td>
                   <td>{row.ref || row.source}</td>
                   <td>{new Date(row.created_at).toLocaleString()}</td>
                 </tr>
